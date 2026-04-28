@@ -1,0 +1,2 @@
+/usr/bin/ar qc librope_serial.a CMakeFiles/rope_serial.dir/src/attention.cpp.o CMakeFiles/rope_serial.dir/src/matrix.cpp.o CMakeFiles/rope_serial.dir/src/metrics.cpp.o CMakeFiles/rope_serial.dir/src/rotary_embedding.cpp.o
+/usr/bin/ranlib librope_serial.a
