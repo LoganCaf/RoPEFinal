@@ -1,6 +1,0 @@
-/home/warpc/Nextcloud/code/c++/2026/parallel/FinalProject/build/CMakeFiles/rope_serial.dir
-/home/warpc/Nextcloud/code/c++/2026/parallel/FinalProject/build/CMakeFiles/rope_benchmark.dir
-/home/warpc/Nextcloud/code/c++/2026/parallel/FinalProject/build/CMakeFiles/rope_tests.dir
-/home/warpc/Nextcloud/code/c++/2026/parallel/FinalProject/build/CMakeFiles/test.dir
-/home/warpc/Nextcloud/code/c++/2026/parallel/FinalProject/build/CMakeFiles/edit_cache.dir
-/home/warpc/Nextcloud/code/c++/2026/parallel/FinalProject/build/CMakeFiles/rebuild_cache.dir

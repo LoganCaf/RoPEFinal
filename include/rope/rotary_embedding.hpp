@@ -28,6 +28,19 @@ private:
   double base_;
 };
 
+class ParallelRotaryEmbedding final : public RotaryEmbedding {
+public:
+  explicit ParallelRotaryEmbedding(double base = 10000.0);
+
+  std::string name() const override;
+  void apply_in_place(Matrix &matrix) const override;
+
+  double base() const noexcept { return base_; }
+
+private:
+  double base_;
+};
+
 void apply_rope_to_row(double *row, std::size_t position, std::size_t dim, double base);
 
 } // namespace rope

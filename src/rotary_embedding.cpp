@@ -48,5 +48,7 @@ void apply_rope_to_row(double *row, std::size_t position, std::size_t dim, doubl
   }
 }
 
+
+
 } // namespace rope
 

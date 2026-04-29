@@ -1,10 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(RoPESerialBaseline LANGUAGES CXX)
+project(RoPESerialBaseline LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -35,3 +38,8 @@ add_executable(rope_tests tests/test_serial.cpp)
 target_link_libraries(rope_tests PRIVATE rope_serial)
 add_test(NAME rope_tests COMMAND rope_tests)
 
+
+# --- Parallel Implementation Target ---
+add_library(rope_cuda src/cuda_attention.cu)
+target_include_directories(rope_cuda PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(rope_cuda PUBLIC rope_serial)
