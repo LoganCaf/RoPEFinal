@@ -8,9 +8,10 @@
 #include <vector>
 
 namespace rope {
-namespace {
 
+namespace {
 using Clock = std::chrono::steady_clock;
+} // namespace
 
 void fill_metrics(PerformanceMetrics *metrics,
                   const std::string &name,
@@ -36,8 +37,6 @@ void fill_metrics(PerformanceMetrics *metrics,
                                   : estimate_scaled_dot_product_attention_bytes(seq_len, head_dim);
   metrics->checksum = output.checksum();
 }
-
-} // namespace
 
 void validate_attention_input(const AttentionInput &input) {
   if (input.query.empty() || input.key.empty() || input.value.empty()) {

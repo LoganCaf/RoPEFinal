@@ -1,7 +1,7 @@
 #include "rope/attention.hpp"
 #include "rope/rotary_embedding.hpp"
 
-
+#include <chrono>
 #include <stdexcept>
 
 #define THREADS_PER_BLK 128
@@ -9,7 +9,31 @@
 
 namespace rope {
 
-  // TODO: ParallelRoPEAttention and ParallelScaledDotProductAttention
+ParallelRoPEAttention::ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary)
+    : rotary_(std::move(rotary)) {
+  if (!rotary_) {
+    throw std::invalid_argument("ParallelRoPEAttention requires a rotary embedding");
+  }
+}
+
+std::string ParallelRoPEAttention::name() const {
+  return "parallel_rope_attention";
+}
+
+Matrix ParallelRoPEAttention::compute(const AttentionInput &input, PerformanceMetrics *metrics) const {
+  validate_attention_input(input);
+
+  const auto start = std::chrono::steady_clock::now();
+  AttentionInput rotated{input.query, input.key, input.value};
+  rotary_->apply_in_place(rotated.query);
+  rotary_->apply_in_place(rotated.key);
+  Matrix output = attention_.compute(rotated);
+
+  const auto end = std::chrono::steady_clock::now();
+  const double elapsed_ms = std::chrono::duration<double, std::milli>(end - start).count();
+  fill_metrics(metrics, name(), output, input.query.rows(), input.query.cols(), elapsed_ms, true);
+  return output;
+}
 
 
 __global__ void rope_kernel(double* in, double* out, double base, int rows, int cols, int vals){
@@ -34,6 +58,12 @@ __global__ void rope_kernel(double* in, double* out, double base, int rows, int 
 
     return;
 
+}
+
+ParallelRotaryEmbedding::ParallelRotaryEmbedding(double base) : base_(base) {}
+
+std::string ParallelRotaryEmbedding::name() const {
+  return "parallel_rotary_embedding";
 }
 
 void ParallelRotaryEmbedding::apply_in_place(Matrix &matrix) const {

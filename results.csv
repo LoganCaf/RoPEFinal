@@ -1,0 +1,3 @@
+kernel,seq_len,head_dim,iterations,elapsed_ms,gflops,bandwidth_gb_s,checksum
+serial_scaled_dot_product_attention,256,64,20,362.248,0.933519,0.086839,-46.0752
+serial_rope_attention,256,64,20,369.673,0.92009,0.0992775,-45.6105

@@ -2,6 +2,7 @@
 #include "rope/matrix.hpp"
 #include "rope/metrics.hpp"
 
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -63,29 +64,60 @@ int main(int argc, char **argv) {
     };
 
     const rope::SerialScaledDotProductAttention baseline;
-    const rope::SerialRoPEAttention rope_attention;
+    const rope::SerialRoPEAttention serial_rope_attention;
+    const rope::ParallelRoPEAttention parallel_rope_attention;
 
-    rope::write_metrics_csv_header(std::cout);
+    std::cout << "Running " << args.iterations << " iterations\n";
 
-    for (const rope::AttentionKernel *kernel : {static_cast<const rope::AttentionKernel *>(&baseline),
-                                                static_cast<const rope::AttentionKernel *>(&rope_attention)}) {
-      rope::PerformanceMetrics total;
-      total.kernel_name = kernel->name();
-      total.seq_len = args.seq_len;
-      total.head_dim = args.head_dim;
-      total.iterations = args.iterations;
+    int equal_count = 0;
+    rope::PerformanceMetrics serial_total;
+    rope::PerformanceMetrics parallel_total;
 
-      for (std::size_t i = 0; i < args.iterations; ++i) {
-        rope::PerformanceMetrics sample;
-        (void)kernel->compute(input, &sample);
-        total.elapsed_ms += sample.elapsed_ms;
-        total.estimated_flops += sample.estimated_flops;
-        total.estimated_bytes += sample.estimated_bytes;
-        total.checksum = sample.checksum;
-      }
+    // Warm up CUDA
+    rope::PerformanceMetrics dummy;
+    parallel_rope_attention.compute(input, &dummy);
 
-      rope::write_metrics_csv_row(std::cout, total);
+    for (std::size_t i = 0; i < args.iterations; ++i) {
+        rope::PerformanceMetrics serial_sample;
+        rope::Matrix serial_output = serial_rope_attention.compute(input, &serial_sample);
+        serial_total.elapsed_ms += serial_sample.elapsed_ms;
+        serial_total.estimated_flops += serial_sample.estimated_flops;
+        serial_total.estimated_bytes += serial_sample.estimated_bytes;
+
+        rope::PerformanceMetrics parallel_sample;
+        rope::Matrix parallel_output = parallel_rope_attention.compute(input, &parallel_sample);
+        parallel_total.elapsed_ms += parallel_sample.elapsed_ms;
+        parallel_total.estimated_flops += parallel_sample.estimated_flops;
+        parallel_total.estimated_bytes += parallel_sample.estimated_bytes;
+
+        bool equal = true;
+        for (size_t j = 0; j < serial_output.size(); ++j) {
+            if (std::abs(serial_output.values()[j] - parallel_output.values()[j]) > 1e-5) {
+                equal = false;
+                break;
+            }
+        }
+        if (equal) {
+            equal_count++;
+        }
     }
+
+    std::cout << "Parallel and Sequential implementations are equal for " << equal_count << "/" << args.iterations << " iterations\n";
+    
+    double avg_serial_ms = serial_total.elapsed_ms / args.iterations;
+    double avg_parallel_ms = parallel_total.elapsed_ms / args.iterations;
+    
+    std::cout << "Average Serial execution time: " << avg_serial_ms << " ms\n";
+    std::cout << "Average Parallel execution time: " << avg_parallel_ms << " ms\n";
+    std::cout << "Average Speedup: " << avg_serial_ms / avg_parallel_ms << "x\n";
+
+    double serial_gflops = (serial_total.estimated_flops / 1e6) / serial_total.elapsed_ms;
+    double parallel_gflops = (parallel_total.estimated_flops / 1e6) / parallel_total.elapsed_ms;
+    double serial_bw = (serial_total.estimated_bytes / 1e6) / serial_total.elapsed_ms;
+    double parallel_bw = (parallel_total.estimated_bytes / 1e6) / parallel_total.elapsed_ms;
+
+    std::cout << "Serial Compute: " << serial_gflops << " GFLOP/s, Memory Bandwidth: " << serial_bw << " GB/s\n";
+    std::cout << "Parallel Compute: " << parallel_gflops << " GFLOP/s, Memory Bandwidth: " << parallel_bw << " GB/s\n";
   } catch (const std::exception &error) {
     std::cerr << "error: " << error.what() << '\n';
     return 1;

@@ -25,6 +25,16 @@ double estimate_scaled_dot_product_attention_bytes(std::size_t seq_len, std::siz
 double estimate_rope_attention_flops(std::size_t seq_len, std::size_t head_dim);
 double estimate_rope_attention_bytes(std::size_t seq_len, std::size_t head_dim);
 
+class Matrix;
+
+void fill_metrics(PerformanceMetrics *metrics,
+                  const std::string &name,
+                  const Matrix &output,
+                  std::size_t seq_len,
+                  std::size_t head_dim,
+                  double elapsed_ms,
+                  bool includes_rope);
+
 void write_metrics_csv_header(std::ostream &out);
 void write_metrics_csv_row(std::ostream &out, const PerformanceMetrics &metrics);
 

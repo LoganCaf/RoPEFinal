@@ -30,7 +30,7 @@ target_compile_options(rope_serial PRIVATE
 )
 
 add_executable(rope_benchmark benchmarks/rope_benchmark.cpp)
-target_link_libraries(rope_benchmark PRIVATE rope_serial)
+target_link_libraries(rope_benchmark PRIVATE rope_serial rope_cuda)
 
 enable_testing()
 
