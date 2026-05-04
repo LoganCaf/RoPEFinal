@@ -9,6 +9,42 @@
 
 namespace rope {
 
+  Matrix cuda_scaled_dot_product_attention(const AttentionInput& input) {
+    // allocate GPU memory
+    // copy input.query, input.key, input.value to GPU
+    // launch score kernel
+    // launch softmax kernel
+    // launch output kernel
+    // copy result back
+    double* Q; 
+    double* K;
+    double* score;
+    
+    int size = input.query.rows() * input.query.cols();
+    int num_bytes = size * sizeof(double);
+
+    int sizeScore = input.query.rows() * input.query.rows();
+    int num_bytesScore = sizeScore * sizeof(double);
+    
+    cudaMalloc(&Q, num_bytes);
+    cudaMalloc(&K, num_bytes);
+    cudaMalloc(&score, num_bytesScore);
+
+    cudaMemcpy(Q, input.query.values().data(), num_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(K, input.key.values().data(), num_bytes, cudaMemcpyHostToDevice);
+
+    dim3 block(THREADS_PER_BLK); // 128 threads
+    dim3 grid((rows + block.x - 1) / block.x, rows);
+
+    score_kernel<<<grid, block>>>(Q, K,score, input.query.rows(), input.query.cols());
+
+    Matrix scoreOut;
+    cudaMemcpy(scoreOut.values().data(), score, num_bytesScore, cudaMemcpyDeviceToHost);
+
+    cudaFree(Q);
+    cudaFree(K);
+  }
+
 ParallelRoPEAttention::ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary)
     : rotary_(std::move(rotary)) {
   if (!rotary_) {
@@ -27,7 +63,7 @@ Matrix ParallelRoPEAttention::compute(const AttentionInput &input, PerformanceMe
   AttentionInput rotated{input.query, input.key, input.value};
   rotary_->apply_in_place(rotated.query);
   rotary_->apply_in_place(rotated.key);
-  Matrix output = attention_.compute(rotated);
+  Matrix output = cuda_scaled_dot_product_attention(rotated);
 
   const auto end = std::chrono::steady_clock::now();
   const double elapsed_ms = std::chrono::duration<double, std::milli>(end - start).count();
@@ -59,6 +95,32 @@ __global__ void rope_kernel(double* in, double* out, double base, int rows, int 
     return;
 
 }
+
+__global__ void score_kernel(double* Q,double* K, double* score, int rows, int cols){
+    extern __shared__ double q_shared[];
+
+    int query_row = blockIdx.y;
+    int key_row = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int d = threadIdx.x; d < cols; d += blockDim.x) {
+        q_shared[d] = Q[query_row * cols + d];
+    }
+
+    __syncthreads();
+
+    if (key_row >= rows) {
+        return;
+    }
+
+    double dot = 0.0;
+
+    for (int d = 0; d < cols; ++d) {
+        dot += q_shared[d] * K[key_row * cols + d];
+    }
+
+    score[query_row * rows + key_row] = dot / sqrt((double)cols);
+}
+
 
 ParallelRotaryEmbedding::ParallelRotaryEmbedding(double base) : base_(base) {}
 
