@@ -44,15 +44,14 @@ private:
 
 class ParallelRoPEAttention final : public AttentionKernel {
 public:
-  explicit ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary =
-                                   std::make_shared<ParallelRotaryEmbedding>());
+  explicit ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary = nullptr, int threads_per_block = 128);
 
   std::string name() const override;
   Matrix compute(const AttentionInput &input, PerformanceMetrics *metrics = nullptr) const override;
 
 private:
   std::shared_ptr<const RotaryEmbedding> rotary_;
-  SerialScaledDotProductAttention attention_;
+  int threads_per_block_;
 };
 void validate_attention_input(const AttentionInput &input);
 

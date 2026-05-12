@@ -8,22 +8,25 @@ if [ ! -f "$EXECUTABLE" ]; then
     exit 1
 fi
 
-# Define 5 different combinations of seq-len and head-dim
-# Note: head-dim must be an even number
-declare -a seq_lens=(512 1024 2048 4096 8192 16384)
-declare -a head_dims=(64 64 128 128 256 256)
+declare -a seq_lens=(128 256 512 1024 2048)
 
 NUM_TESTS=${#seq_lens[@]}
+HEAD_DIM=64
+NUM_ITERATIONS=25
+
 
 echo "Starting benchmark suite with $NUM_TESTS configurations..."
 echo "================================================="
 
 for i in "${!seq_lens[@]}"; do
     seq_len=${seq_lens[$i]}
-    head_dim=${head_dims[$i]}
     
-    echo -e "\n\n---> Running Test $((i+1))/$NUM_TESTS: --seq-len $seq_len --head-dim $head_dim"
-    $EXECUTABLE --seq-len $seq_len --head-dim $head_dim --iterations 5
+    echo -e "\n\n---> Running Test $((i+1))/$NUM_TESTS: --seq-len $seq_len --head-dim $HEAD_DIM"
+    if [ "$#" -eq 1 ]; then
+        $EXECUTABLE --seq-len $seq_len --head-dim $HEAD_DIM --iterations $NUM_ITERATIONS --csv-output "$1"
+    else
+        $EXECUTABLE --seq-len $seq_len --head-dim $HEAD_DIM --iterations $NUM_ITERATIONS
+    fi
 done
 
 echo -e "\n\n================================================="

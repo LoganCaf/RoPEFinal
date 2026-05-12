@@ -4,16 +4,13 @@
 #include <chrono>
 #include <stdexcept>
 
-#define THREADS_PER_BLK 128
-
-
 namespace rope {
-  Matrix cuda_scaled_dot_product_attention(const AttentionInput& input);
+  Matrix cuda_scaled_dot_product_attention(const AttentionInput& input, int threads_per_block);
 
-ParallelRoPEAttention::ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary)
-    : rotary_(std::move(rotary)) {
+ParallelRoPEAttention::ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary, int threads_per_block)
+    : rotary_(std::move(rotary)), threads_per_block_(threads_per_block) {
   if (!rotary_) {
-    throw std::invalid_argument("ParallelRoPEAttention requires a rotary embedding");
+    rotary_ = std::make_shared<ParallelRotaryEmbedding>(10000.0, threads_per_block_);
   }
 }
 
@@ -28,7 +25,7 @@ Matrix ParallelRoPEAttention::compute(const AttentionInput &input, PerformanceMe
   AttentionInput rotated{input.query, input.key, input.value};
   rotary_->apply_in_place(rotated.query);
   rotary_->apply_in_place(rotated.key);
-  Matrix output = cuda_scaled_dot_product_attention(rotated);
+  Matrix output = cuda_scaled_dot_product_attention(rotated, threads_per_block_);
 
   const auto end = std::chrono::steady_clock::now();
   const double elapsed_ms = std::chrono::duration<double, std::milli>(end - start).count();
@@ -163,15 +160,15 @@ __global__ void softmax_kernel(double* score, int rows) {
       output[row * cols + d] = value;
   }
 
-Matrix cuda_scaled_dot_product_attention(const AttentionInput& input) {
-      int rows = input.query.rows();
-      int cols = input.query.cols();
+Matrix cuda_scaled_dot_product_attention(const AttentionInput& input, int threads_per_block) {
+      std::size_t rows = input.query.rows();
+      std::size_t cols = input.query.cols();
 
-      int size = rows * cols;
-      int num_bytes = size * sizeof(double);
+      std::size_t size = rows * cols;
+      std::size_t num_bytes = size * sizeof(double);
 
-      int sizeScore = rows * rows;
-      int num_bytesScore = sizeScore * sizeof(double);
+      std::size_t sizeScore = rows * rows;
+      std::size_t num_bytesScore = sizeScore * sizeof(double);
 
       double* Q;
       double* K;
@@ -184,12 +181,12 @@ Matrix cuda_scaled_dot_product_attention(const AttentionInput& input) {
       cudaMemcpy(Q, input.query.values().data(), num_bytes, cudaMemcpyHostToDevice);
       cudaMemcpy(K, input.key.values().data(), num_bytes, cudaMemcpyHostToDevice);
 
-      dim3 block(THREADS_PER_BLK);
+      dim3 block(threads_per_block);
       dim3 grid((rows + block.x - 1) / block.x, rows);
 
       score_kernel<<<grid, block, cols * sizeof(double)>>>(Q, K, score, rows, cols);
 
-      softmax_kernel<<<rows, THREADS_PER_BLK, THREADS_PER_BLK * sizeof(double)>>>(score, rows);
+      softmax_kernel<<<rows, threads_per_block, threads_per_block * sizeof(double)>>>(score, rows);
 
       cudaMemcpy(K, input.value.values().data(), num_bytes, cudaMemcpyHostToDevice);
 
@@ -210,7 +207,7 @@ Matrix cuda_scaled_dot_product_attention(const AttentionInput& input) {
   }
 
 
-ParallelRotaryEmbedding::ParallelRotaryEmbedding(double base) : base_(base) {}
+ParallelRotaryEmbedding::ParallelRotaryEmbedding(double base, int threads_per_block) : base_(base), threads_per_block_(threads_per_block) {}
 
 std::string ParallelRotaryEmbedding::name() const {
   return "parallel_rotary_embedding";
@@ -229,9 +226,9 @@ void ParallelRotaryEmbedding::apply_in_place(Matrix &matrix) const {
 
     cudaMemcpy(gpu_in, matrix.values().data(), num_bytes, cudaMemcpyHostToDevice);
 
-    int num_blocks = ((size / 2) + THREADS_PER_BLK - 1) / THREADS_PER_BLK;
+    int num_blocks = ((size / 2) + threads_per_block_ - 1) / threads_per_block_;
 
-    rope_kernel<<<num_blocks,THREADS_PER_BLK>>>(
+    rope_kernel<<<num_blocks, threads_per_block_>>>(
         gpu_in,
         gpu_out,
         base_,
