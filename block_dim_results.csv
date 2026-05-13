@@ -1,0 +1,6 @@
+kernel,seq_len,head_dim,iterations,elapsed_ms,gflops,bandwidth_gb_s,checksum
+parallel_64,4096,64,25,276.595,391.376,25.3998,0
+parallel_128,4096,64,25,268.395,403.332,26.1758,0
+parallel_256,4096,64,25,273.8775,395.259,25.6519,0
+parallel_512,4096,64,25,273.6675,395.562,25.6715,0
+parallel_1024,4096,64,25,294.7575,367.258,23.8346,0

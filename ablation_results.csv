@@ -1,0 +1,5 @@
+kernel,seq_len,head_dim,iterations,elapsed_ms,gflops,bandwidth_gb_s,checksum
+sequential,1024,64,25,21869.65,0.309705,0.0227747,0
+cuda_rope_serial_attention,1024,64,25,21849.575,0.30999,0.0227956,0
+parallel_no_preload_128,1024,64,10000,15208.2,178.145,13.1002,0
+parallel_128,1024,64,10000,14998.6,180.634,13.2832,0

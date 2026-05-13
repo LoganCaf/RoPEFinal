@@ -5,10 +5,16 @@
 #include <stdexcept>
 
 namespace rope {
-  Matrix cuda_scaled_dot_product_attention(const AttentionInput& input, int threads_per_block);
+  Matrix cuda_scaled_dot_product_attention(const AttentionInput& input,
+                                           int threads_per_block,
+                                           bool preload_query);
 
-ParallelRoPEAttention::ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary, int threads_per_block)
-    : rotary_(std::move(rotary)), threads_per_block_(threads_per_block) {
+ParallelRoPEAttention::ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary,
+                                             int threads_per_block,
+                                             bool preload_query)
+    : rotary_(std::move(rotary)),
+      threads_per_block_(threads_per_block),
+      preload_query_(preload_query) {
   if (!rotary_) {
     rotary_ = std::make_shared<ParallelRotaryEmbedding>(10000.0, threads_per_block_);
   }
@@ -25,7 +31,7 @@ Matrix ParallelRoPEAttention::compute(const AttentionInput &input, PerformanceMe
   AttentionInput rotated{input.query, input.key, input.value};
   rotary_->apply_in_place(rotated.query);
   rotary_->apply_in_place(rotated.key);
-  Matrix output = cuda_scaled_dot_product_attention(rotated, threads_per_block_);
+  Matrix output = cuda_scaled_dot_product_attention(rotated, threads_per_block_, preload_query_);
 
   const auto end = std::chrono::steady_clock::now();
   const double elapsed_ms = std::chrono::duration<double, std::milli>(end - start).count();
@@ -56,6 +62,25 @@ __global__ void rope_kernel(double* in, double* out, double base, int rows, int 
 
     return;
 
+}
+
+__global__ void score_kernel_basic(double* Q,double* K, double* score, int rows, int cols){
+
+    int query_row = blockIdx.y;
+    int key_row = blockIdx.x * blockDim.x + threadIdx.x;
+
+
+    if (key_row >= rows) {
+        return;
+    }
+
+    double dot = 0.0;
+
+    for (int d = 0; d < cols; ++d) {
+        dot += Q[query_row * cols + d] * K[key_row * cols + d];
+    }
+
+    score[query_row * rows + key_row] = dot / sqrt((double)cols);
 }
 
 __global__ void score_kernel(double* Q,double* K, double* score, int rows, int cols){
@@ -160,7 +185,9 @@ __global__ void softmax_kernel(double* score, int rows) {
       output[row * cols + d] = value;
   }
 
-Matrix cuda_scaled_dot_product_attention(const AttentionInput& input, int threads_per_block) {
+Matrix cuda_scaled_dot_product_attention(const AttentionInput& input,
+                                         int threads_per_block,
+                                         bool preload_query) {
       std::size_t rows = input.query.rows();
       std::size_t cols = input.query.cols();
 
@@ -184,7 +211,11 @@ Matrix cuda_scaled_dot_product_attention(const AttentionInput& input, int thread
       dim3 block(threads_per_block);
       dim3 grid((rows + block.x - 1) / block.x, rows);
 
-      score_kernel<<<grid, block, cols * sizeof(double)>>>(Q, K, score, rows, cols);
+      if (preload_query) {
+          score_kernel<<<grid, block, cols * sizeof(double)>>>(Q, K, score, rows, cols);
+      } else {
+          score_kernel_basic<<<grid, block>>>(Q, K, score, rows, cols);
+      }
 
       softmax_kernel<<<rows, threads_per_block, threads_per_block * sizeof(double)>>>(score, rows);
 

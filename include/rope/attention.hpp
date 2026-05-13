@@ -44,7 +44,9 @@ private:
 
 class ParallelRoPEAttention final : public AttentionKernel {
 public:
-  explicit ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary = nullptr, int threads_per_block = 128);
+  explicit ParallelRoPEAttention(std::shared_ptr<const RotaryEmbedding> rotary = nullptr,
+                                 int threads_per_block = 128,
+                                 bool preload_query = true);
 
   std::string name() const override;
   Matrix compute(const AttentionInput &input, PerformanceMetrics *metrics = nullptr) const override;
@@ -52,8 +54,8 @@ public:
 private:
   std::shared_ptr<const RotaryEmbedding> rotary_;
   int threads_per_block_;
+  bool preload_query_;
 };
 void validate_attention_input(const AttentionInput &input);
 
 } // namespace rope
-
